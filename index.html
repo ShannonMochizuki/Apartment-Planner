@@ -18,15 +18,17 @@ button,input{font:inherit}button{min-height:42px;border:1px solid var(--line);ba
 button.primary{background:var(--accent);color:white;border-color:var(--accent)}button:disabled{opacity:.4}
 main{padding:10px}.tools{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
 .row{display:flex;gap:7px;flex-wrap:wrap}.field{flex:1;min-width:90px}.field label{font-size:11px;color:var(--muted);display:block}
+.filebtn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 10px;cursor:pointer}.library{display:flex;gap:8px;overflow:auto;padding:8px 0 2px}.libitem{min-width:130px;max-width:150px;border:1px solid var(--line);border-radius:10px;background:white;padding:7px}.libthumb{width:100%;height:80px;object-fit:contain;background:#f7f5ef;border-radius:7px}.libitem b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.libitem small{color:var(--muted)}
 input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border-radius:8px;background:white}
 .workspace{height:64vh;min-height:430px;overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff;padding:8px;-webkit-overflow-scrolling:touch}
 #canvas{position:relative;width:900px;height:900px;background-image:linear-gradient(to right,#e4e1d9 1px,transparent 1px),linear-gradient(to bottom,#e4e1d9 1px,transparent 1px);background-size:30px 30px}
 .obj{position:absolute;touch-action:none;user-select:none;-webkit-user-select:none;border:2px solid #333;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;padding:2px;font-size:11px}
-.room{background:var(--room);z-index:2}.furniture{background:var(--furn);z-index:5}.door{z-index:9;background:transparent;border:0;border-bottom:5px solid #222;overflow:visible}
+.room{background:var(--room);z-index:2}.furniture{background:var(--furn);z-index:5}.furniture.has-image{background:#f7f5ef;padding:0}.furniture .furnimg{width:100%;height:100%;object-fit:contain;pointer-events:none}.furniture .furnlabel{position:absolute;left:2px;right:2px;bottom:2px;background:rgba(255,255,255,.82);border-radius:4px;padding:1px 2px;font-size:9px}.door{z-index:9;background:transparent;border:0;border-bottom:5px solid #222;overflow:visible}
 .door:after{content:"";position:absolute;left:0;bottom:0;width:100%;height:100%;border:1px dashed #555;border-left:0;border-bottom:0;border-radius:0 100% 0 0}
 .selected{outline:4px solid var(--accent);outline-offset:2px}.badge{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
 .notice{font-size:12px;color:var(--muted);margin:7px 1px}.selectnotice{background:#e5f0eb;border:1px solid var(--accent);padding:8px;border-radius:9px;margin-bottom:8px}
 #editor{margin-top:10px}.hidden{display:none!important}
+.modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:18px}.modalcard{width:min(520px,100%);max-height:88vh;overflow:auto;background:var(--panel);border-radius:14px;padding:12px}.previewimg{width:100%;max-height:58vh;object-fit:contain;background:white;border-radius:10px;border:1px solid var(--line)}
 .version{position:fixed;right:8px;bottom:calc(6px + env(safe-area-inset-bottom));z-index:100;font-size:10px;color:var(--muted);opacity:.62;pointer-events:none;background:rgba(243,239,230,.78);padding:2px 5px;border-radius:5px}
 </style>
 </head>
@@ -47,28 +49,40 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 <div class="row" style="margin-top:8px"><button id="addRoom" class="primary">+ Room</button><button data-door="800">+ 800 door</button><button data-door="900">+ 900 door</button><button data-f="Sofa,2000,900">+ Sofa</button><button data-f="Queen bed,1520,1900">+ Bed</button><button data-f="Dining,1400,800">+ Dining</button><button data-f="Wardrobe,1200,600">+ Wardrobe</button></div>
 <div class="notice">Rooms snap wall-to-wall. Doors snap to nearby room walls. Workspace represents 15 × 15 m.</div>
 </section>
+<section class="tools">
+<b>Furniture library</b><div class="sub">Add your own furniture using real dimensions. Top view is shown on the plan; front view is an optional preview.</div>
+<div class="row" style="margin-top:8px"><div class="field"><label>Name</label><input id="furnName" value="My furniture"></div><div class="field"><label>Width (mm)</label><input id="furnW" type="number" value="1000"></div><div class="field"><label>Depth (mm)</label><input id="furnD" type="number" value="600"></div><div class="field"><label>Height (mm)</label><input id="furnH" type="number" value="800"></div></div>
+<div class="row" style="margin-top:8px"><label class="filebtn">Top view image<input id="topImage" type="file" accept="image/*" hidden></label><span id="topFile" class="notice">No image</span><label class="filebtn">Front view image<input id="frontImage" type="file" accept="image/*" hidden></label><span id="frontFile" class="notice">Optional</span></div>
+<div class="row" style="margin-top:8px"><button id="addCustomFurniture" class="primary">+ Add to library & plan</button></div>
+<div id="furnitureLibrary" class="library"></div>
+</section>
 <div class="workspace"><div id="canvas"></div></div>
 <div id="status" class="notice">Add a room to begin.</div>
 <section id="editor" class="tools hidden">
 <b>Edit selected object</b>
 <div class="row" style="margin-top:8px"><div class="field"><label>Name</label><input id="editName"></div><div class="field"><label>Width mm</label><input id="editW" type="number"></div><div class="field"><label>Depth mm</label><input id="editH" type="number"></div></div>
-<div class="row" style="margin-top:8px"><button id="rotateBtn">↻ Rotate</button><button id="deleteBtn">Delete</button></div>
+<div class="row" style="margin-top:8px"><button id="rotateBtn">↻ Rotate</button><button id="frontPreviewBtn" class="hidden">Front preview</button><button id="deleteBtn">Delete</button></div>
+<div id="furnDetails" class="notice hidden"></div>
 </section>
 </main>
+<div id="previewModal" class="modal hidden"><div class="modalcard"><div class="row" style="justify-content:space-between;align-items:center"><b id="previewTitle">Front view</b><button id="closePreview">Close</button></div><img id="previewImage" class="previewimg" alt="Furniture front view"><div id="previewDims" class="notice"></div></div></div>
 <div class="version" id="version"></div>
 <script>
-const APP_VERSION="1.1.0";
+const APP_VERSION="1.2.0";
 const SIZE=15000, PX=900, SNAP=200, EDGE_SNAP=200, DSNAP=300;
 const $=s=>document.querySelector(s), C=$("#canvas");
-let objects=[], selected=new Set(), nextId=0, selectMode=false;
+let objects=[], selected=new Set(), nextId=0, selectMode=false, furnitureLibrary=[];
+let pendingTopImage=null,pendingFrontImage=null;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), mm2px=v=>v/SIZE*PX, px2mm=v=>v/PX*SIZE;
 function roomArea(o){return o.areaOverride ?? o.w*o.h/1e6}
-function save(){localStorage.setItem("apartmentPlanner",JSON.stringify(objects.map(({el,...o})=>o)));$("#status").textContent="Saved on this phone."}
-function load(){let d=localStorage.getItem("apartmentPlanner");if(!d)return $("#status").textContent="No saved plan found.";clear(false);JSON.parse(d).forEach(o=>create(o.type,o.name,o.w,o.h,o.x,o.y,o.areaOverride,o.id));nextId=Math.max(0,...objects.map(o=>o.id));selected.clear();refresh();$("#status").textContent="Saved plan loaded."}
+function save(){localStorage.setItem("apartmentPlanner",JSON.stringify(objects.map(({el,...o})=>o)));saveLibrary();$("#status").textContent="Saved on this phone."}
+function saveLibrary(){try{localStorage.setItem("apartmentFurnitureLibrary",JSON.stringify(furnitureLibrary))}catch(e){$("#status").textContent="Image storage is full. Try smaller furniture images."}}
+function loadLibrary(){try{furnitureLibrary=JSON.parse(localStorage.getItem("apartmentFurnitureLibrary")||"[]")}catch(e){furnitureLibrary=[]}renderLibrary()}
+function load(){let d=localStorage.getItem("apartmentPlanner");if(!d)return $("#status").textContent="No saved plan found.";clear(false);JSON.parse(d).forEach(o=>create(o.type,o.name,o.w,o.h,o.x,o.y,o.areaOverride,o.id,o));nextId=Math.max(0,...objects.map(o=>o.id));selected.clear();refresh();$("#status").textContent="Saved plan loaded."}
 function updateStats(){let rooms=objects.filter(o=>o.type==="room");$("#area").textContent=rooms.reduce((a,o)=>a+roomArea(o),0).toFixed(2)+" m²";$("#roomCount").textContent=rooms.length;let n=rooms.filter(o=>selected.has(o.id)).length;$("#mergeBtn").disabled=n<2;$("#mergeBtn").textContent=n?`Merge selected (${n})`:"Merge selected";$("#selectBtn").textContent=selectMode?`✕ Done selecting (${n})`:"☑ Select rooms"}
-function draw(o){o.el.style.left=mm2px(o.x)+"px";o.el.style.top=mm2px(o.y)+"px";o.el.style.width=Math.max(5,mm2px(o.w))+"px";o.el.style.height=Math.max(5,mm2px(o.h))+"px";if(o.type==="door"){o.el.innerHTML="";return}let n="";if(selectMode&&selected.has(o.id)&&o.type==="room"){let ids=objects.filter(q=>q.type==="room"&&selected.has(q.id)).map(q=>q.id);n=`<span class="badge">${ids.indexOf(o.id)+1}</span>`}o.el.innerHTML=`<span><b>${o.name}</b><br>${o.w} × ${o.h} mm${o.type==="room"?`<br>${roomArea(o).toFixed(2)} m²`:""}</span>${n}`}
-function refresh(){objects.forEach(o=>{o.el.classList.toggle("selected",selected.has(o.id));draw(o)});let o=!selectMode&&selected.size===1?objects.find(x=>selected.has(x.id)):null;$("#editor").classList.toggle("hidden",!o);if(o){$("#editName").value=o.name;$("#editW").value=o.w;$("#editH").value=o.h}updateStats()}
-function create(type,name,w,h,x=500,y=500,areaOverride=null,id=null){let o={id:id??++nextId,type,name,w:+w,h:+h,x:+x,y:+y,areaOverride:areaOverride??null,el:null};if(id!==null)nextId=Math.max(nextId,id);let el=document.createElement("div");el.className=`obj ${type}`;o.el=el;objects.push(o);C.appendChild(el);wire(o);draw(o);return o}
+function draw(o){o.el.style.left=mm2px(o.x)+"px";o.el.style.top=mm2px(o.y)+"px";o.el.style.width=Math.max(5,mm2px(o.w))+"px";o.el.style.height=Math.max(5,mm2px(o.h))+"px";if(o.type==="door"){o.el.innerHTML="";return}let n="";if(selectMode&&selected.has(o.id)&&o.type==="room"){let ids=objects.filter(q=>q.type==="room"&&selected.has(q.id)).map(q=>q.id);n=`<span class="badge">${ids.indexOf(o.id)+1}</span>`}if(o.type==="furniture"&&o.topImage){o.el.classList.add("has-image");o.el.innerHTML=`<img class="furnimg" src="${o.topImage}" alt=""><span class="furnlabel"><b>${o.name}</b></span>`}else{o.el.classList.remove("has-image");o.el.innerHTML=`<span><b>${o.name}</b><br>${o.w} × ${o.h} mm${o.type==="room"?`<br>${roomArea(o).toFixed(2)} m²`:""}</span>${n}`}}
+function refresh(){objects.forEach(o=>{o.el.classList.toggle("selected",selected.has(o.id));draw(o)});let o=!selectMode&&selected.size===1?objects.find(x=>selected.has(x.id)):null;$("#editor").classList.toggle("hidden",!o);if(o){$("#editName").value=o.name;$("#editW").value=o.w;$("#editH").value=o.h;let custom=o.type==="furniture"&&(o.topImage||o.frontImage||o.height);$("#frontPreviewBtn").classList.toggle("hidden",!o.frontImage);$("#furnDetails").classList.toggle("hidden",!custom);if(custom)$("#furnDetails").textContent=`Furniture: ${o.w} W × ${o.h} D${o.height?` × ${o.height} H`:""} mm • Top view on plan`;}else{$("#frontPreviewBtn").classList.add("hidden");$("#furnDetails").classList.add("hidden")}updateStats()}
+function create(type,name,w,h,x=500,y=500,areaOverride=null,id=null,extra={}){let o={id:id??++nextId,type,name,w:+w,h:+h,x:+x,y:+y,areaOverride:areaOverride??null,height:+extra.height||null,topImage:extra.topImage||null,frontImage:extra.frontImage||null,libraryId:extra.libraryId||null,el:null};if(id!==null)nextId=Math.max(nextId,id);let el=document.createElement("div");el.className=`obj ${type}`;o.el=el;objects.push(o);C.appendChild(el);wire(o);draw(o);return o}
 function overlaps(a1,a2,b1,b2){return Math.min(a2,b2)-Math.max(a1,b1)>100}
 function snapRoom(o,nx,ny){
   let bx=nx,by=ny,bestX=SNAP+1,bestY=SNAP+1,wallMateX=null,wallMateY=null;
@@ -111,6 +125,16 @@ function wire(o){let active=false,pid,sx,sy,ox,oy,moved=false;o.el.addEventListe
 $("#addRoom").onclick=()=>{let o=create("room",$("#roomName").value||"Room",+$("#roomW").value||3000,+$("#roomH").value||3000);selected.clear();selected.add(o.id);refresh()};
 document.querySelectorAll("[data-door]").forEach(b=>b.onclick=()=>{let o=create("door","Door",+b.dataset.door,120,6500,6500);selected.clear();selected.add(o.id);refresh()});
 document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{let [n,w,h]=b.dataset.f.split(",");let o=create("furniture",n,+w,+h,6500,6500);selected.clear();selected.add(o.id);refresh()});
+
+function readImage(file){return new Promise((resolve,reject)=>{if(!file)return resolve(null);let r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)})}
+function renderLibrary(){let box=$("#furnitureLibrary");box.innerHTML="";if(!furnitureLibrary.length){box.innerHTML='<span class="notice">Your saved furniture will appear here.</span>';return}for(let f of furnitureLibrary){let d=document.createElement("div");d.className="libitem";d.innerHTML=`${f.topImage?`<img class="libthumb" src="${f.topImage}" alt="">`:'<div class="libthumb" style="display:grid;place-items:center">Top view</div>'}<b>${f.name}</b><small>${f.w} × ${f.d} × ${f.height} mm</small><div class="row" style="margin-top:6px"><button data-place>Place</button><button data-remove>×</button></div>`;d.querySelector("[data-place]").onclick=()=>placeLibraryFurniture(f);d.querySelector("[data-remove]").onclick=()=>{if(confirm(`Remove ${f.name} from the furniture library?`)){furnitureLibrary=furnitureLibrary.filter(x=>x.id!==f.id);saveLibrary();renderLibrary()}};box.appendChild(d)}}
+function placeLibraryFurniture(f){let o=create("furniture",f.name,f.w,f.d,6500,6500,null,null,{height:f.height,topImage:f.topImage,frontImage:f.frontImage,libraryId:f.id});selected.clear();selected.add(o.id);refresh();$("#status").textContent=`${f.name} placed. Drag it into a room.`}
+$("#topImage").onchange=e=>{$("#topFile").textContent=e.target.files[0]?.name||"No image"};
+$("#frontImage").onchange=e=>{$("#frontFile").textContent=e.target.files[0]?.name||"Optional"};
+$("#addCustomFurniture").onclick=async()=>{let name=$("#furnName").value.trim()||"Furniture",w=Math.max(50,+$("#furnW").value||0),d=Math.max(50,+$("#furnD").value||0),height=Math.max(1,+$("#furnH").value||0);if(!w||!d)return;$("#status").textContent="Adding furniture…";try{let topImage=await readImage($("#topImage").files[0]),frontImage=await readImage($("#frontImage").files[0]);let f={id:Date.now(),name,w,d,height,topImage,frontImage};furnitureLibrary.push(f);saveLibrary();renderLibrary();placeLibraryFurniture(f);$("#topImage").value="";$("#frontImage").value="";$("#topFile").textContent="No image";$("#frontFile").textContent="Optional"}catch(e){$("#status").textContent="Could not read that image."}};
+$("#frontPreviewBtn").onclick=()=>{let o=objects.find(x=>selected.has(x.id));if(!o?.frontImage)return;$("#previewTitle").textContent=o.name+" — front view";$("#previewImage").src=o.frontImage;$("#previewDims").textContent=`${o.w} W × ${o.h} D${o.height?` × ${o.height} H`:""} mm`;$("#previewModal").classList.remove("hidden")};
+$("#closePreview").onclick=()=>$("#previewModal").classList.add("hidden");$("#previewModal").addEventListener("click",e=>{if(e.target===$("#previewModal"))$("#previewModal").classList.add("hidden")});
+
 $("#selectBtn").onclick=()=>{selectMode=!selectMode;selected.clear();$("#selectNotice").classList.toggle("hidden",!selectMode);$("#editor").classList.add("hidden");refresh()};
 $("#mergeBtn").onclick=()=>{let rs=objects.filter(o=>o.type==="room"&&selected.has(o.id));if(rs.length<2)return;let x=Math.min(...rs.map(o=>o.x)),y=Math.min(...rs.map(o=>o.y)),r=Math.max(...rs.map(o=>o.x+o.w)),b=Math.max(...rs.map(o=>o.y+o.h)),a=rs.reduce((s,o)=>s+roomArea(o),0),ids=new Set(rs.map(o=>o.id));rs.forEach(o=>o.el.remove());objects=objects.filter(o=>!ids.has(o.id));selected.clear();selectMode=false;$("#selectNotice").classList.add("hidden");let o=create("room","Merged room",r-x,b-y,x,y,a);selected.add(o.id);refresh()};
 function applyEdit(){let o=objects.find(x=>selected.has(x.id));if(!o)return;o.name=$("#editName").value||"Object";o.w=Math.max(50,+$("#editW").value||50);o.h=Math.max(50,+$("#editH").value||50);if(o.type==="room")o.areaOverride=null;o.x=clamp(o.x,0,SIZE-o.w);o.y=clamp(o.y,0,SIZE-o.h);refresh()}
@@ -121,6 +145,7 @@ function clear(ask=true){if(ask&&!confirm("Clear the current plan?"))return;obje
 $("#clearBtn").onclick=()=>clear(true);$("#saveBtn").onclick=save;$("#loadBtn").onclick=load;
 $("#version").textContent=`v${APP_VERSION}`;
 if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js?v="+APP_VERSION).then(r=>r.update()));
+loadLibrary();
 updateStats();
 </script>
 </body></html>
