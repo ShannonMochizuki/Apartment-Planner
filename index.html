@@ -27,6 +27,7 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 .selected{outline:4px solid var(--accent);outline-offset:2px}.badge{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
 .notice{font-size:12px;color:var(--muted);margin:7px 1px}.selectnotice{background:#e5f0eb;border:1px solid var(--accent);padding:8px;border-radius:9px;margin-bottom:8px}
 #editor{margin-top:10px}.hidden{display:none!important}
+.version{position:fixed;right:8px;bottom:calc(6px + env(safe-area-inset-bottom));z-index:100;font-size:10px;color:var(--muted);opacity:.62;pointer-events:none;background:rgba(243,239,230,.78);padding:2px 5px;border-radius:5px}
 </style>
 </head>
 <body>
@@ -54,8 +55,10 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 <div class="row" style="margin-top:8px"><button id="rotateBtn">↻ Rotate</button><button id="deleteBtn">Delete</button></div>
 </section>
 </main>
+<div class="version" id="version"></div>
 <script>
-const SIZE=15000, PX=900, SNAP=200, DSNAP=300;
+const APP_VERSION="1.1.0";
+const SIZE=15000, PX=900, SNAP=200, EDGE_SNAP=200, DSNAP=300;
 const $=s=>document.querySelector(s), C=$("#canvas");
 let objects=[], selected=new Set(), nextId=0, selectMode=false;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), mm2px=v=>v/SIZE*PX, px2mm=v=>v/PX*SIZE;
@@ -67,7 +70,42 @@ function draw(o){o.el.style.left=mm2px(o.x)+"px";o.el.style.top=mm2px(o.y)+"px";
 function refresh(){objects.forEach(o=>{o.el.classList.toggle("selected",selected.has(o.id));draw(o)});let o=!selectMode&&selected.size===1?objects.find(x=>selected.has(x.id)):null;$("#editor").classList.toggle("hidden",!o);if(o){$("#editName").value=o.name;$("#editW").value=o.w;$("#editH").value=o.h}updateStats()}
 function create(type,name,w,h,x=500,y=500,areaOverride=null,id=null){let o={id:id??++nextId,type,name,w:+w,h:+h,x:+x,y:+y,areaOverride:areaOverride??null,el:null};if(id!==null)nextId=Math.max(nextId,id);let el=document.createElement("div");el.className=`obj ${type}`;o.el=el;objects.push(o);C.appendChild(el);wire(o);draw(o);return o}
 function overlaps(a1,a2,b1,b2){return Math.min(a2,b2)-Math.max(a1,b1)>100}
-function snapRoom(o,nx,ny){let bx=nx,by=ny,dx=SNAP+1,dy=SNAP+1;for(let q of objects){if(q===o||q.type!=="room")continue;if(overlaps(ny,ny+o.h,q.y,q.y+q.h))for(let v of [q.x-o.w,q.x+q.w]){let d=Math.abs(nx-v);if(d<=SNAP&&d<dx){dx=d;bx=v}}if(overlaps(nx,nx+o.w,q.x,q.x+q.w))for(let v of [q.y-o.h,q.y+q.h]){let d=Math.abs(ny-v);if(d<=SNAP&&d<dy){dy=d;by=v}}}return[clamp(bx,0,SIZE-o.w),clamp(by,0,SIZE-o.h)]}
+function snapRoom(o,nx,ny){
+  let bx=nx,by=ny,bestX=SNAP+1,bestY=SNAP+1,wallMateX=null,wallMateY=null;
+  // First snap the room wall-to-wall. Keep the room that caused each snap so
+  // the perpendicular edges can also lock to the same neighbour.
+  for(let q of objects){
+    if(q===o||q.type!=="room")continue;
+    if(overlaps(ny,ny+o.h,q.y,q.y+q.h)){
+      for(let v of [q.x-o.w,q.x+q.w]){let d=Math.abs(nx-v);if(d<=SNAP&&d<bestX){bestX=d;bx=v;wallMateX=q}}
+    }
+    if(overlaps(nx,nx+o.w,q.x,q.x+q.w)){
+      for(let v of [q.y-o.h,q.y+q.h]){let d=Math.abs(ny-v);if(d<=SNAP&&d<bestY){bestY=d;by=v;wallMateY=q}}
+    }
+  }
+  // When a vertical shared wall snaps, also align a nearby top/bottom edge.
+  if(wallMateX){
+    const q=wallMateX, candidates=[q.y,q.y+q.h-o.h];
+    let best=EDGE_SNAP+1,target=by;
+    for(let v of candidates){let d=Math.abs(by-v);if(d<=EDGE_SNAP&&d<best){best=d;target=v}}
+    by=target;
+  }
+  // When a horizontal shared wall snaps, also align a nearby left/right edge.
+  if(wallMateY){
+    const q=wallMateY, candidates=[q.x,q.x+q.w-o.w];
+    let best=EDGE_SNAP+1,target=bx;
+    for(let v of candidates){let d=Math.abs(bx-v);if(d<=EDGE_SNAP&&d<best){best=d;target=v}}
+    bx=target;
+  }
+  // Finally allow exact corner/edge alignment with any nearby room. This is
+  // deliberately independent on X/Y so rooms click together without gaps.
+  for(let q of objects){
+    if(q===o||q.type!=="room")continue;
+    for(let v of [q.x,q.x+q.w-o.w])if(Math.abs(bx-v)<=EDGE_SNAP)bx=v;
+    for(let v of [q.y,q.y+q.h-o.h])if(Math.abs(by-v)<=EDGE_SNAP)by=v;
+  }
+  return[clamp(bx,0,SIZE-o.w),clamp(by,0,SIZE-o.h)]
+}
 function snapDoor(o,nx,ny){let bx=nx,by=ny,best=DSNAP+1,vertical=false;for(let q of objects){if(q.type!=="room")continue;let cx=nx+o.w/2,cy=ny+o.h/2;for(let x of [q.x,q.x+q.w])if(cy>=q.y&&cy<=q.y+q.h&&Math.abs(cx-x)<best){best=Math.abs(cx-x);bx=x-o.w/2;vertical=true}for(let y of [q.y,q.y+q.h])if(cx>=q.x&&cx<=q.x+q.w&&Math.abs(cy-y)<best){best=Math.abs(cy-y);by=y-o.h/2;vertical=false}}if(best<=DSNAP){if(vertical&&o.w>o.h)[o.w,o.h]=[o.h,o.w];if(!vertical&&o.h>o.w)[o.w,o.h]=[o.h,o.w]}return[clamp(bx,0,SIZE-o.w),clamp(by,0,SIZE-o.h)]}
 function wire(o){let active=false,pid,sx,sy,ox,oy,moved=false;o.el.addEventListener("pointerdown",e=>{if(selectMode){if(o.type!=="room")return;e.preventDefault();selected.has(o.id)?selected.delete(o.id):selected.add(o.id);refresh();return}selected.clear();selected.add(o.id);refresh();active=true;moved=false;pid=e.pointerId;sx=e.clientX;sy=e.clientY;ox=o.x;oy=o.y;o.el.setPointerCapture?.(pid)});o.el.addEventListener("pointermove",e=>{if(!active||e.pointerId!==pid||selectMode)return;let dx=e.clientX-sx,dy=e.clientY-sy;if(!moved&&Math.hypot(dx,dy)<4)return;moved=true;e.preventDefault();let nx=Math.round((ox+px2mm(dx))/50)*50,ny=Math.round((oy+px2mm(dy))/50)*50;nx=clamp(nx,0,SIZE-o.w);ny=clamp(ny,0,SIZE-o.h);if(o.type==="room")[nx,ny]=snapRoom(o,nx,ny);if(o.type==="door")[nx,ny]=snapDoor(o,nx,ny);o.x=nx;o.y=ny;draw(o)});let end=e=>{if(!active||e.pointerId!==pid)return;active=false;draw(o)};o.el.addEventListener("pointerup",end);o.el.addEventListener("pointercancel",end)}
 $("#addRoom").onclick=()=>{let o=create("room",$("#roomName").value||"Room",+$("#roomW").value||3000,+$("#roomH").value||3000);selected.clear();selected.add(o.id);refresh()};
@@ -81,7 +119,8 @@ $("#rotateBtn").onclick=()=>{let o=objects.find(x=>selected.has(x.id));if(!o)ret
 $("#deleteBtn").onclick=()=>{let ids=new Set(selected);objects.filter(o=>ids.has(o.id)).forEach(o=>o.el.remove());objects=objects.filter(o=>!ids.has(o.id));selected.clear();refresh()};
 function clear(ask=true){if(ask&&!confirm("Clear the current plan?"))return;objects.forEach(o=>o.el.remove());objects=[];selected.clear();selectMode=false;$("#selectNotice").classList.add("hidden");refresh()}
 $("#clearBtn").onclick=()=>clear(true);$("#saveBtn").onclick=save;$("#loadBtn").onclick=load;
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));
+$("#version").textContent=`v${APP_VERSION}`;
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js?v="+APP_VERSION).then(r=>r.update()));
 updateStats();
 </script>
 </body></html>
