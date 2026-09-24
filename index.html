@@ -46,7 +46,7 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 <div class="field"><label>Width (mm)</label><input id="roomW" type="number" value="3000"></div>
 <div class="field"><label>Depth (mm)</label><input id="roomH" type="number" value="3000"></div>
 </div>
-<div class="row" style="margin-top:8px"><button id="addRoom" class="primary">+ Room</button><button data-door="800">+ 800 door</button><button data-door="900">+ 900 door</button><button data-f="Sofa,2000,900">+ Sofa</button><button data-f="Queen bed,1520,1900">+ Bed</button><button data-f="Dining,1400,800">+ Dining</button><button data-f="Wardrobe,1200,600">+ Wardrobe</button></div>
+<div class="row" style="margin-top:8px"><button id="addRoom" class="primary">+ Room</button><button data-door="800">+ 800 door</button><button data-door="900">+ 900 door</button></div>
 <div class="notice">Rooms snap wall-to-wall. Doors snap to nearby room walls. Workspace represents 15 × 15 m.</div>
 </section>
 <section class="tools">
@@ -68,7 +68,7 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 <div id="previewModal" class="modal hidden"><div class="modalcard"><div class="row" style="justify-content:space-between;align-items:center"><b id="previewTitle">Front view</b><button id="closePreview">Close</button></div><img id="previewImage" class="previewimg" alt="Furniture front view"><div id="previewDims" class="notice"></div></div></div>
 <div class="version" id="version"></div>
 <script>
-const APP_VERSION="1.7.0";
+const APP_VERSION="1.7.1";
 const SIZE=15000, PX=900, SNAP=200, EDGE_SNAP=200, DSNAP=300;
 const $=s=>document.querySelector(s), C=$("#canvas");
 let objects=[], selected=new Set(), nextId=0, selectMode=false, furnitureLibrary=[];
@@ -141,7 +141,6 @@ function snapDoor(o,nx,ny){let bx=nx,by=ny,best=DSNAP+1,vertical=false;for(let q
 function wire(o){let active=false,pid,sx,sy,ox,oy,moved=false;o.el.addEventListener("pointerdown",e=>{if(selectMode){if(o.type!=="room")return;e.preventDefault();selected.has(o.id)?selected.delete(o.id):selected.add(o.id);refresh();return}selected.clear();selected.add(o.id);refresh();active=true;moved=false;pid=e.pointerId;sx=e.clientX;sy=e.clientY;ox=o.x;oy=o.y;o.el.setPointerCapture?.(pid)});o.el.addEventListener("pointermove",e=>{if(!active||e.pointerId!==pid||selectMode)return;let dx=e.clientX-sx,dy=e.clientY-sy;if(!moved&&Math.hypot(dx,dy)<4)return;moved=true;e.preventDefault();let nx=Math.round((ox+px2mm(dx))/50)*50,ny=Math.round((oy+px2mm(dy))/50)*50;nx=clamp(nx,0,SIZE-o.w);ny=clamp(ny,0,SIZE-o.h);if(o.type==="room")[nx,ny]=snapRoom(o,nx,ny);if(o.type==="door")[nx,ny]=snapDoor(o,nx,ny);o.x=nx;o.y=ny;draw(o)});let end=e=>{if(!active||e.pointerId!==pid)return;active=false;draw(o)};o.el.addEventListener("pointerup",end);o.el.addEventListener("pointercancel",end)}
 $("#addRoom").onclick=()=>{let o=create("room",$("#roomName").value||"Room",+$("#roomW").value||3000,+$("#roomH").value||3000);selected.clear();selected.add(o.id);refresh()};
 document.querySelectorAll("[data-door]").forEach(b=>b.onclick=()=>{let o=create("door","Door",+b.dataset.door,120,6500,6500);selected.clear();selected.add(o.id);refresh()});
-document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{let [n,w,h]=b.dataset.f.split(",");let o=create("furniture",n,+w,+h,6500,6500);selected.clear();selected.add(o.id);refresh()});
 
 function readImage(file){return new Promise((resolve,reject)=>{if(!file)return resolve(null);if(!file.type.startsWith("image/"))return reject(new Error("Not an image"));let r=new FileReader();r.onerror=()=>reject(new Error("Could not read image"));r.onload=()=>{let img=new Image();img.onerror=()=>reject(new Error("Could not open image"));img.onload=()=>{try{const MAX=900,scale=Math.min(1,MAX/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale)),c=document.createElement("canvas");c.width=w;c.height=h;let ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);resolve(c.toDataURL("image/png"))}catch(err){reject(err)}};img.src=r.result};r.readAsDataURL(file)})}
 function renderLibrary(){let box=$("#furnitureLibrary");box.innerHTML="";if(!furnitureLibrary.length){box.innerHTML='<span class="notice">Your saved furniture will appear here.</span>';return}for(let f of furnitureLibrary){let d=document.createElement("div");d.className="libitem";d.innerHTML=`${f.topImage?`<img class="libthumb" src="${f.topImage}" alt="">`:'<div class="libthumb" style="display:grid;place-items:center">Top view</div>'}<b>${f.name}</b><small>${f.w} × ${f.d} × ${f.height} mm<br>${money(f.price)}</small><div class="row" style="margin-top:6px"><button data-place>Place</button><button data-remove>×</button></div>`;d.querySelector("[data-place]").onclick=()=>placeLibraryFurniture(f);d.querySelector("[data-remove]").onclick=()=>{if(confirm(`Remove ${f.name} from the furniture library?`)){furnitureLibrary=furnitureLibrary.filter(x=>x.id!==f.id);saveLibrary();renderLibrary()}};box.appendChild(d)}}
