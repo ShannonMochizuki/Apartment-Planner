@@ -68,17 +68,34 @@ input{width:100%;min-height:40px;padding:7px;border:1px solid var(--line);border
 <div id="previewModal" class="modal hidden"><div class="modalcard"><div class="row" style="justify-content:space-between;align-items:center"><b id="previewTitle">Front view</b><button id="closePreview">Close</button></div><img id="previewImage" class="previewimg" alt="Furniture front view"><div id="previewDims" class="notice"></div></div></div>
 <div class="version" id="version"></div>
 <script>
-const APP_VERSION="1.7.1";
+const APP_VERSION="1.7.2";
 const SIZE=15000, PX=900, SNAP=200, EDGE_SNAP=200, DSNAP=300;
 const $=s=>document.querySelector(s), C=$("#canvas");
 let objects=[], selected=new Set(), nextId=0, selectMode=false, furnitureLibrary=[];
 let pendingTopImage=null,pendingFrontImage=null;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), mm2px=v=>v/SIZE*PX, px2mm=v=>v/PX*SIZE, money=v=>"S$"+(+v||0).toFixed(2);
 function roomArea(o){return o.parts?.length?o.parts.reduce((a,p)=>a+p.w*p.h/1e6,0):(o.areaOverride ?? o.w*o.h/1e6)}
-function save(){localStorage.setItem("apartmentPlanner",JSON.stringify(objects.map(({el,...o})=>o)));saveLibrary();$("#status").textContent="Saved on this phone."}
+function save(){try{
+  // Furniture images already live in the library. Do not duplicate large base64 images in the plan save.
+  const plan=objects.map(({el,...o})=>{
+    const saved={...o};
+    if(saved.type==="furniture"&&saved.libraryId){delete saved.topImage;delete saved.frontImage;}
+    return saved;
+  });
+  localStorage.setItem("apartmentPlanner",JSON.stringify(plan));
+  if(!saveLibrary())return;
+  $("#status").textContent=`Saved ${objects.length} objects, including ${objects.filter(o=>o.type==="furniture").length} furniture item(s), on this phone.`;
+}catch(e){
+  console.error(e);
+  $("#status").textContent="Plan could not be saved. This phone may be out of storage for the app.";
+}}
 function saveLibrary(){try{localStorage.setItem("apartmentFurnitureLibrary",JSON.stringify(furnitureLibrary));return true}catch(e){$("#status").textContent="Furniture could not be saved: phone storage for this app is full.";return false}}
 function loadLibrary(){try{furnitureLibrary=JSON.parse(localStorage.getItem("apartmentFurnitureLibrary")||"[]")}catch(e){furnitureLibrary=[]}renderLibrary()}
-function load(){let d=localStorage.getItem("apartmentPlanner");if(!d)return $("#status").textContent="No saved plan found.";clear(false);JSON.parse(d).forEach(o=>create(o.type,o.name,o.w,o.h,o.x,o.y,o.areaOverride,o.id,o));nextId=Math.max(0,...objects.map(o=>o.id));selected.clear();refresh();$("#status").textContent="Saved plan loaded."}
+function load(){let d=localStorage.getItem("apartmentPlanner");if(!d)return $("#status").textContent="No saved plan found.";try{clear(false);JSON.parse(d).forEach(o=>{
+  // Reattach furniture artwork from the saved library when the plan stores only a library reference.
+  if(o.type==="furniture"&&o.libraryId){const f=furnitureLibrary.find(x=>x.id===o.libraryId);if(f){o.topImage=o.topImage||f.topImage;o.frontImage=o.frontImage||f.frontImage;o.height=o.height||f.height;if(o.price==null)o.price=f.price;}}
+  create(o.type,o.name,o.w,o.h,o.x,o.y,o.areaOverride,o.id,o);
+});nextId=Math.max(0,...objects.map(o=>o.id));selected.clear();refresh();$("#status").textContent=`Saved plan loaded with ${objects.filter(o=>o.type==="furniture").length} furniture item(s).`;}catch(e){console.error(e);$("#status").textContent="Saved plan could not be loaded.";}}
 function updateStats(){let rooms=objects.filter(o=>o.type==="room"),furniture=objects.filter(o=>o.type==="furniture");$("#area").textContent=rooms.reduce((a,o)=>a+roomArea(o),0).toFixed(2)+" m²";$("#roomCount").textContent=rooms.length;$("#furnitureTotal").textContent="S$"+furniture.reduce((a,o)=>a+(+o.price||0),0).toFixed(2);let n=rooms.filter(o=>selected.has(o.id)).length;$("#mergeBtn").disabled=n<2;$("#mergeBtn").textContent=n?`Merge selected (${n})`:"Merge selected";$("#selectBtn").textContent=selectMode?`✕ Done selecting (${n})`:"☑ Select rooms"}
 function draw(o){o.el.style.left=mm2px(o.x)+"px";o.el.style.top=mm2px(o.y)+"px";o.el.style.width=Math.max(5,mm2px(o.w))+"px";o.el.style.height=Math.max(5,mm2px(o.h))+"px";if(o.type==="room"&&o.parts?.length){o.el.style.clipPath=roomClip(o);o.el.style.webkitClipPath=roomClip(o)}else{o.el.style.clipPath="";o.el.style.webkitClipPath=""}if(o.type==="door"){o.el.innerHTML="";return}let n="";if(selectMode&&selected.has(o.id)&&o.type==="room"){let ids=objects.filter(q=>q.type==="room"&&selected.has(q.id)).map(q=>q.id);n=`<span class="badge">${ids.indexOf(o.id)+1}</span>`}if(o.type==="furniture"&&o.topImage){o.el.classList.add("has-image");const rot=((+o.rotation||0)%360+360)%360,odd=rot%180!==0,imgStyle=odd?`width:${Math.max(5,mm2px(o.h))}px;height:${Math.max(5,mm2px(o.w))}px;inset:auto;left:50%;top:50%;transform:translate(-50%,-50%) rotate(${rot}deg);`:`transform:rotate(${rot}deg);`;o.el.innerHTML=`<img class="furnimg" src="${o.topImage}" alt="${o.name} top view" style="${imgStyle}">`}else{o.el.classList.remove("has-image");o.el.innerHTML=`<span><b>${o.name}</b><br>${o.w} × ${o.h} mm${o.type==="room"?`<br>${roomArea(o).toFixed(2)} m²`:""}</span>${n}`}}
 function refresh(){objects.forEach(o=>{o.el.classList.toggle("selected",selected.has(o.id));draw(o)});let o=!selectMode&&selected.size===1?objects.find(x=>selected.has(x.id)):null;$("#editor").classList.toggle("hidden",!o);if(o){$("#editName").value=o.name;$("#editW").value=o.w;$("#editH").value=o.h;$("#editW").disabled=!!o.parts?.length;$("#editH").disabled=!!o.parts?.length;let custom=o.type==="furniture"&&(o.topImage||o.frontImage||o.height);$("#frontPreviewBtn").classList.toggle("hidden",!o.frontImage);$("#furnDetails").classList.toggle("hidden",!custom);if(custom)$("#furnDetails").textContent=`Furniture: ${o.w} W × ${o.h} D${o.height?` × ${o.height} H`:""} mm • ${money(o.price)} • Top view on plan`;}else{$("#frontPreviewBtn").classList.add("hidden");$("#furnDetails").classList.add("hidden")}updateStats()}
